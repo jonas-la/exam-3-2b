@@ -135,7 +135,7 @@ Note that the first line of output is already given in the starter code. For a s
 
 ## Additional Notes
 
-1. All communation must be through ICMP messages.
+1. **All communation must be through ICMP messages**.
 1. Using raw sockets require root priviliges. Make sure you test the program as root; otherwise we would get `permission denied` in `sendto(...)`. 
 1. Based on the resolved IP by the DNS, we can expect to get different output for different runs of the same test case.
 1. Your program will be manually tested for correctness.
