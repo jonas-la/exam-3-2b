@@ -76,6 +76,14 @@ void traceroute(char* dest) {
      * - icmpheader* icmp = (icmpheader*)send_buf;
      * - set header fields with required values: icmp->field = value;
      * */
+
+    // DOING START 1
+    // create icmp object
+    // I moved this to inside the for loop
+    
+
+    // DOING END 1
+
     
     for (int ttl = 1; ttl <= MAX_HOPS; ) {
         printf("%2d ", ttl);
@@ -85,6 +93,23 @@ void traceroute(char* dest) {
          * HINT:
          * similar to TODO 1 HINT, just set the seq
          */
+
+        // DOING START 2
+        struct icmpheader* icmp = (struct icmpheader*)send_buf;
+
+        // initialize my packet with the values in TODO 1
+        icmp->icmp_type = ICMP_ECHO_REQUEST;
+        icmp->icmp_code = 0;
+        icmp->icmp_chksum = 0;
+        // sets the id to my process' pid
+        icmp->icmp_id = getpid();
+
+        // updates sequence to current time to live
+        icmp->icmp_seq = ttl;
+        // updates the send_buf with the icmp
+        memcpy(send_buf, icmp, sizeof(struct icmpheader));
+
+        // DOING END 2
        
 
         // set ttl to outgoing packets: no need to change
@@ -103,9 +128,29 @@ void traceroute(char* dest) {
              * - ensure we send one icmpheader in the packet
              * 
              */
+
+            // DOING START 3
+            socklen_t addr_len = sizeof(addr);
+
+            // this sends the a single icmpheader stored in send_buf the address in addr
+            if (sendto(sockfd, &send_buf, sizeof(struct icmpheader), 0,  (struct sockaddr*)&addr, addr_len) == -1) {
+                // Error occurred
+                perror("sendto");
+                close(sockfd);
+                exit(1);
+            }
+            // DOING END 3
            
            
             // wait to check if there is data available to receive; need to retry if timeout: no need to change
+                 
+            // DOING START 
+            // The above comment is a lie, there is an issue with the starter code, this is my attempt to fix it
+            // I'm initializing these variables that are used below
+            timeval tv;
+            fd_set rfd;
+            // DOING END
+
             tv.tv_sec = 1;
             tv.tv_usec = 0;
             FD_ZERO(&rfd);
@@ -119,6 +164,20 @@ void traceroute(char* dest) {
              */
             if (ret == 0) {
                 // TODO 4.a
+
+                // DOING START 4a
+
+                // increments retry
+                retry++;
+                // prints the * but TODO 6 will add the new line character
+                printf("*");
+
+                // The pseudocode says to resend the message but it's unclear whether I am actually
+                // resending the message here or just starting the while loop again.
+                // I'm taking it that I should just exit the if else statement and let TODO 6 take care of resending
+
+                // DOING END 4a
+
             }
             else if (ret > 0) {
                 // TODO 4.b
@@ -126,6 +185,21 @@ void traceroute(char* dest) {
                  * a. check man page of recvfrom, function returns bytes received
                  * b. ensure data is received in recv_buf
                  */
+
+                // DOING START 4b
+                
+                // This uses recvfrom the put the received information into the recv_buf
+                // how many bytes received are stored in this variable
+                int bytes_received = recvfrom(sockfd, recv_buf, PACKET_LEN, 0, NULL, 0);
+
+                // int bytes_received = recvfrom(sockfd, recv_buf, PACKET_LEN, 0, (struct sockaddr*)&addr, &addr_len);
+
+                // exits if there was an error with recvfrom
+                if (bytes_received == -1) {
+                    perror("recvfrom");
+                    exit(1);
+                }
+                // DOING END 4b
                 
                 /** TODO: 5
                  * handle received packets based on received bytes
@@ -146,6 +220,84 @@ void traceroute(char* dest) {
                  */
                
                 // ----------------
+
+                // DOING START 5
+                if (bytes_received >= 2 * (sizeof(struct ipheader) + sizeof(struct icmpheader))) {
+                   
+                    // This gets the first set of ip and icmp headers from recv_buf
+                    struct ipheader* iphdr_router = (struct ipheader*)recv_buf;
+                    struct icmpheader* icmphdr_router = (struct icmpheader*)(recv_buf + sizeof(struct ipheader));
+
+                    // This gets the second set of ip and icmp headers from recv_buf
+                    struct ipheader* iphdr_original = (struct ipheader*)(recv_buf + sizeof(struct ipheader) + sizeof(struct icmpheader));
+                    struct icmpheader* icmphdr_original = (struct icmpheader*)(recv_buf + sizeof(struct ipheader) + sizeof(struct icmpheader) + sizeof(struct ipheader));
+                    // I was using these to test
+                    // printf("icmphdr_original->icmp_type: %d\n", icmphdr_original->icmp_type);
+                    // printf("icmphdr_original->icmp_seq: %d\n", icmphdr_original->icmp_seq);
+                    // printf("icmphdr_original->icmp_id: %d\n",  icmphdr_original->icmp_id);
+                    // printf("my pid: %d\n", getpid());
+
+                    // printf("icmphdr_router->icmp_type: %d\n", icmphdr_router->icmp_type);
+                    // printf("icmphdr_router->icmp_seq: %d\n", icmphdr_router->icmp_seq);
+                    // printf("icmphdr_router->icmp_id: %d\n",  icmphdr_router->icmp_id);
+
+                    // printf("icmphdr_router->icmp_id: %d\n",  icmphdr_router->icmp_id);
+
+
+
+                    
+
+                    if (icmphdr_router->icmp_type == ICMP_TIME_EXCEEDED &&
+                        icmphdr_original->icmp_seq == ttl &&
+                        icmphdr_original->icmp_id == getpid()) {
+                        
+                        // Print router IP and increment ttl
+                        // char router_ip[INET_ADDRSTRLEN];
+                        // inet_ntop(AF_INET, &(addr.sin_addr), router_ip, INET_ADDRSTRLEN);
+                        // 
+                        printf("%s ", inet_ntoa(iphdr_router->iph_sourceip));
+                        printf(" (%s) ", inet_ntoa(iphdr_router->iph_sourceip));
+                        printf("%ld ms", tv.tv_usec/1000);
+                        iphdr_original->iph_ttl++;
+                        retry = MAX_RETRY;
+                    }
+                    else {
+
+                        // Ignore packet
+                    }
+                }
+                else if (bytes_received >= sizeof(struct icmpheader)) {
+                    struct ipheader* iphdr_router = (struct ipheader*)recv_buf;
+                    struct icmpheader* icmphdr = (struct icmpheader*)recv_buf + sizeof(struct ipheader);
+
+                    // I was using these for testing
+                    // printf("icmphdr->icmp_type: %d\n", icmphdr->icmp_type);
+                    // printf("icmphdr->icmp_seq: %d\n", icmphdr->icmp_seq);
+                    // printf("icmphdr->icmp_id: %d\n",  icmphdr->icmp_id);
+                    // printf("my pid: %d\n", getpid());
+                    // char destination_ip1[INET_ADDRSTRLEN];
+                    // inet_ntop(AF_INET, &(addr.sin_addr), destination_ip1, INET_ADDRSTRLEN);
+                    // printf("%s ", destination_ip1);
+                    // printf(" (%s) ", destination_ip1);
+                    // printf("%ld ms \n", tv.tv_usec/1000);
+
+                    
+
+                    if (icmphdr->icmp_type == ICMP_ECHO_REPLY) {
+                        // should call if reached destination ip
+
+                        char destination_ip[INET_ADDRSTRLEN];
+                        inet_ntop(AF_INET, &(addr.sin_addr), destination_ip, INET_ADDRSTRLEN);
+                        printf("%s ", destination_ip);
+                        printf(" (%s) ", destination_ip);
+                        printf("%ld ms \n", tv.tv_usec/1000);
+                        exit(0);
+                    }
+                }
+                else {
+                    // Ignore packet
+                }
+                // DOING END 5
             }
             else {
                 perror("select failed");
@@ -156,6 +308,18 @@ void traceroute(char* dest) {
             /** TODO: 6
              * Check if timed out for MAX_RETRY times; increment ttl to move on to processing next hop
              */
+
+            // DOING START 6
+            // if retries maxed out
+            if(retry == MAX_RETRY){
+                // increments ttl
+                ttl++;
+                // prints end line character for *'s
+                printf("\n");
+                // breaks the infite loop
+                break;
+            }
+            // DOING END 6
         }
     }
     close(sockfd);
